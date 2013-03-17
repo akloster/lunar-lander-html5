@@ -1,0 +1,18 @@
+A Lunar Lander Game
+===================
+It's not rocket science, just Html5 ...
+---------------------------------------
+
+
+This little demonstration game is in early stages of production. Working features:
+
+* The Lunar lander was modeled in Blender and raytraced into 100 frames of
+  rotation
+* Terrain is a mesh exported from Blender
+* Box2d Physics for collision detection between the edges of the terrain mesh
+  and the lander, but the lander collision mesh needs more work
+* Works with ThreeJs' WebGLRenderer and canvas renderer
+
+
+To run it, clone the repository and run python -m SimpleHTTPServer from the www directory,
+then point your browser at http://localhost:8000
