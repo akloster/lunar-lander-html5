@@ -8,7 +8,7 @@
     height: 600
   };
 
-  global.renderer = new THREE.WebGLRenderer({
+  global.renderer = new THREE.CanvasRenderer({
     canvas: $("canvas")[0]
   });
 
