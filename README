@@ -16,3 +16,11 @@ This little demonstration game is in early stages of production. Working feature
 
 To run it, clone the repository and run python -m SimpleHTTPServer from the www directory,
 then point your browser at http://localhost:8000
+
+
+Notes:
+* To export the level mesh to threejs format you will need to copy the exporter
+plugin from the ThreeJs source directory into the appropriate directory in
+the blender distribution
+* UV mapping for the terrain is done in Blender, so you need to update the UV
+mesh every time you change the mesh

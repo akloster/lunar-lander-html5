@@ -3,7 +3,7 @@ window.global =
   width: 1020
   height: 600
 
-
+b2Scale = 0.01
 global.renderer = new THREE.CanvasRenderer
   canvas: $("canvas")[0]
 
@@ -74,11 +74,15 @@ global.landerMaterial = new THREE.MeshBasicMaterial
     overdraw: true
 
 
+terrainSurface = THREE.ImageUtils.loadTexture "img/lunarsurface.png"
+terrainSurface.wrapS = THREE.RepeatWrapping 
+terrainSurface.wrapT = THREE.RepeatWrapping 
 global.levelMaterial = new THREE.MeshBasicMaterial
     color: 0xffffff
     side: THREE.DoubleSide
     shading: THREE.FlatShading
     overdraw: true
+    map: terrainSurface
 
 global.resourceCount = 0
 
@@ -95,7 +99,7 @@ zeroFill = (i,n)->
   return a.join("")+i
 
 landerFrameUvs = []
-$.get 'js/textures.json', {}, countDown (data)->
+$.getJSON 'js/textures.json', {}, countDown (data)->
   for i in [1..100]
     s = 'lander'+zeroFill(i, 4)+'.png'
     frame = data.frames[s].frame
@@ -103,22 +107,26 @@ $.get 'js/textures.json', {}, countDown (data)->
 
 class Game
   constructor: ()->
-    gravity = new b2Vec2(0, 10)
+    gravity = new b2Vec2(0, 10*b2Scale)
     # create a temporary ground
     @world = new b2World(gravity, true)
     @lander = new Lander(@)
 
-
     body = $("body")
+    preventDefault = (func)->
+      (event)->
+        r = func(event)
+        event.preventDefault()
+        return r
+
     body.keydown @keyDown
     body.keyup @keyUp
     @pressedKeys = {}
-    jsonLoader.load "js/level1.js", (model)=>
-      global.levelModel = model
-      @level = new THREE.Mesh(global.levelModel, global.levelMaterial)
+    new THREE.JSONLoader().load "js/level1.js", (model)=>
+      @level = new THREE.Mesh(model, global.levelMaterial)
       global.scene.add(@level)
       @level.position.x = 0
-      @level.position.y =-10
+      @level.position.y = 0
       @level.position.z = -1
       @level.scale.y = -1
       @level.scale.x = 1
@@ -138,8 +146,8 @@ class Game
       for edge,count of edges
         if count==1
           [a,b] = edge.split("-")
-          v1 = new b2Vec2(verts[a].x, -verts[a].y)
-          v2 = new b2Vec2(verts[b].x, -verts[b].y)
+          v1 = new b2Vec2(verts[a].x * b2Scale, -verts[a].y * b2Scale)
+          v2 = new b2Vec2(verts[b].x * b2Scale, -verts[b].y * b2Scale)
           @makeEdge(v1, v2)
   keyDown: (event)=>
     @pressedKeys[event.keyCode] = true
@@ -149,6 +157,7 @@ class Game
   mainLoop: =>
     newFrame = new Date().getTime()
     dt = (newFrame-@lastFrame)/1000
+    if dt>2 then dt = 0.01
     @lastFrame = newFrame
     requestAnimationFrame(@mainLoop)
     @lander.steering = 0
@@ -185,23 +194,25 @@ class Game
     shape = new b2PolygonShape.AsEdge(v1,v2)
     fixtureDef.shape = shape
     body.CreateFixture(fixtureDef)
-class Lander
-  constructor: (game)->
+
+class Sprite
+  constructor: (config)->
+    @game = config.game
     bodyDef = new b2BodyDef
     @bodyDef = bodyDef
     bodyDef.type = b2Body.b2_dynamicBody
     bodyDef.position.x = 0
-    bodyDef.position.y = 0
+    bodyDef.position.y = -100 * b2Scale
     bodyDef.angle = 0
-    body = game.world.CreateBody(bodyDef)
+    body = @game.world.CreateBody(bodyDef)
     body.test = "test"
     @body = body
-    body.w = 15
-    body.h = 20
+    body.w = config.width * b2Scale
+    body.h = config.height * b2Scale
     fixtureDef = new b2FixtureDef
-    fixtureDef.restitution = 0.0
-    fixtureDef.density = 5000.0 / body.w / body.h
-    fixtureDef.friction = 0.9
+    fixtureDef.restitution = 0.1
+    fixtureDef.density = 1000000/ body.w / body.h
+    fixtureDef.friction = 0.7
     shape = new b2PolygonShape.AsBox(body.w, body.h)
     fixtureDef.shape = shape
     body.CreateFixture(fixtureDef)
@@ -210,15 +221,15 @@ class Lander
     @steering = 0
 
   update: (dt)->
-    x = @body.GetPosition().x
-    y = @body.GetPosition().y
+    x = @body.GetPosition().x / b2Scale
+    y = @body.GetPosition().y / b2Scale
     @mesh.position.x = x
     @mesh.position.y = y
     a = @body.GetAngle()
-    @body.m_torque=(1000000000*dt*@steering)
-    thrust = 20000000*dt*@thrust
+    @body.m_torque=(2000000*dt*@steering)
+    thrust = 200000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
-    p1 = new b2Vec2(x, y)
+    p1 = new b2Vec2(x*b2Scale, y*b2Scale)
     @body.ApplyForce(f, p1)
     if landerFrameUvs.length>0
       if a<0
@@ -234,5 +245,12 @@ class Lander
       landerGeometry.uvsNeedUpdate = true
       # Adjust residual rotation
       @mesh.rotation.z = a-((frame-25)/100.0 * Math.PI * 2)
+
+class Lander extends Sprite
+  constructor: (game) ->
+    super
+      game: game
+      width: 11
+      height: 6
 game = new Game()
 game.launch()
