@@ -4,7 +4,9 @@ window.global =
   height: 600
   resourceCounter: 0
 
-signedMod = (a,b)->
+# Standard javascript modulo operator returns negative values, so we need our
+# own
+window.signedMod = (a,b)->
   return if a < 0 then b+a%b else a%b
 console.log '>',signedMod(-5, 10)
 b2Scale = 0.01
@@ -17,7 +19,7 @@ global.camera = new THREE.OrthographicCamera(- window.global.width / 4,
                                                window.global.width / 4,
                                              - window.global.height / 4,
                                                window.global.height / 4,
-                                               1, 3000)
+                                               -10, 3000)
 global.camera.position.z = 1000
 global.scene.add(global.camera)
 global.renderer.setSize(global.width, global.height)
@@ -44,7 +46,7 @@ pushFaces = (geometry, faces)->
 atlas = THREE.ImageUtils.loadTexture "img/textures.png"
 
 atlas_w = 1022
-atlas_h = 1520
+atlas_h = 1652
 
 vector2 = (x,y)-> new THREE.Vector2(x,y)
 
@@ -56,13 +58,17 @@ global.landerMaterial = new THREE.MeshBasicMaterial
     transparent: true
     side: THREE.DoubleSide
     shading: THREE.FlatShading
+    transparency: true
     map: atlas
     overdraw: true
+    wireframe: true
 
-
+global.exhaustMaterial = global.landerMaterial.clone()
+global.exhaustMaterial.opacity = 0.2
 global.debugMaterial = new THREE.MeshBasicMaterial
     color: 0xffffff
-    wireframe: true#shading: THREE.FlatShading
+    wireframe: true
+    shading: THREE.FlatShading
     side: THREE.DoubleSide
 
 terrainSurface = THREE.ImageUtils.loadTexture "img/lunarsurface.png"
@@ -83,7 +89,7 @@ zeroFill = (i,n)->
     a.push "0"
   return a.join("")+i
 
-
+# Decorator to count down resource loads
 countedCallback = (func)->
   global.resourceCounter+=1
   return ->
@@ -95,9 +101,14 @@ countedCallback = (func)->
 
 landerFrameUvs = []
 rocketFrameUvs = []
+exhaustFrameUvs = []
 $.getJSON 'js/textures.json', {}, countedCallback (data)->
-  for [name, array] in [["lander", landerFrameUvs], ["rocket", rocketFrameUvs] ]
-    for i in [1..100]
+  for [name, array, frames] in [
+    ["lander", landerFrameUvs, 100]
+    ["rocket", rocketFrameUvs, 100]
+    ["exhaust", exhaustFrameUvs, 25]
+  ]
+    for i in [1..frames]
       s = name+zeroFill(i, 4)+'.png'
       frame = data.frames[s].frame
       array.push vector2(frame.x / atlas_w, frame.y / atlas_h)
@@ -166,7 +177,7 @@ class Game
           x: x #x * b2Scale
           y: -y
     @debugGeometry = new THREE.Geometry()
-    @debugMesh = new THREE.Mesh(@debugGeometry, global.debugMaterial)
+    @debugMesh = new THREE.Mesh(@debugGeometry, global.landerMaterial)
   keyDown: (event)=>
     @pressedKeys[event.keyCode] = true
   keyUp: (event)=>
@@ -232,29 +243,13 @@ class RotationalSprite
     @spriteW = config.spriteW
     @spriteH = config.spriteH
     @angleOffset = config.angleOffset
-    bodyDef = new b2BodyDef
-    @bodyDef = bodyDef
-    bodyDef.type = b2Body.b2_dynamicBody
-    bodyDef.position.x = config.x * b2Scale
-    bodyDef.position.y = config.y * b2Scale
-    bodyDef.angle = 0
-    body = @game.world.CreateBody(bodyDef)
-    body.test = "test"
-    @body = body
-    body.w = config.width * b2Scale
-    body.h = config.height * b2Scale
-    fixtureDef = new b2FixtureDef
-    fixtureDef.restitution = 0.1
-    fixtureDef.density = config.mass / body.w / body.h
-    fixtureDef.friction = 0.7
-    shape = new b2PolygonShape.AsBox(body.w, body.h)
-    fixtureDef.shape = shape
-    body.CreateFixture(fixtureDef)
+    @createBody(config)
     @geometry = new THREE.PlaneGeometry(config.sideLength/2, config.sideLength/2, 1, 1)
     @mesh = new THREE.Mesh(@geometry, global.landerMaterial)
     global.scene.add(@mesh)
     @steering = 0
-
+  createBody: ->
+    undefined
   setPosition: (x,y) ->
     @body.SetPosition (new b2Vec2(x,y))
 
@@ -263,10 +258,11 @@ class RotationalSprite
     y = @body.GetPosition().y / b2Scale
     @mesh.position.x = x
     @mesh.position.y = y
+    @mesh.position.z = -1
     a = @body.GetAngle()+Math.PI/2
     if @atlasUvs.length>0
       a = signedMod(a,Math.PI*2)
-      frame = signedMod(Math.floor((a/Math.PI/2) *100)+@angleOffset, 100)
+      frame = Math.floor signedMod(a/Math.PI/2 *100+@angleOffset, 100)
       v = @atlasUvs[frame]
       @geometry.faceVertexUvs = [[[
         vector2 v.x, 1-v.y
@@ -284,7 +280,7 @@ class Lander extends RotationalSprite
       game: game
       atlasUvs: landerFrameUvs
       width: 11
-      height: 6
+      height: 4
       mass : 1000000
       spriteW: 64 / atlas_w
       spriteH: 64 / atlas_h
@@ -292,31 +288,105 @@ class Lander extends RotationalSprite
       y: 0
       angleOffset: 0
       sideLength: 64
+      friction: 0.7
+
+    @exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1)
+    @exhaustMesh = new THREE.Mesh(@exhaustGeometry, global.exhaustMaterial)
+    @exhaustStrength = 0
+    @exhaustCycle = 0
+    global.scene.add(@exhaustMesh)
+  createBody: (config)->
+    bodyDef = new b2BodyDef
+    @bodyDef = bodyDef
+    bodyDef.type = b2Body.b2_dynamicBody
+    bodyDef.position.x = config.x * b2Scale
+    bodyDef.position.y = config.y * b2Scale
+    bodyDef.angle = 0
+    body = @game.world.CreateBody(bodyDef)
+    body.test = "test"
+    @body = body
+    body.w = config.width * b2Scale
+    body.h = config.height * b2Scale
+    fixtureDef = new b2FixtureDef
+    fixtureDef.restitution = 0.1
+    fixtureDef.density = config.mass / body.w / body.h
+    fixtureDef.friction = config.friction
+    fixtureDef.shape = new b2PolygonShape.AsOrientedBox(body.w, body.h, new b2Vec2(0,7*b2Scale),0)
+    body.CreateFixture(fixtureDef)
+    fixtureDef = new b2FixtureDef
+    fixtureDef.restitution = 0.1
+    fixtureDef.density = config.mass / body.w / body.h
+    fixtureDef.friction = config.friction
+    fixtureDef.shape = new b2CircleShape(5*b2Scale)
+    fixtureDef.shape.SetLocalPosition(new b2Vec2(0,-5*b2Scale))
+    body.CreateFixture(fixtureDef)
+
   update: (dt)->
     x = @body.GetPosition().x / b2Scale
     y = @body.GetPosition().y / b2Scale
     a = @body.GetAngle()
-    @body.m_torque=(2000000*dt*@steering)
+    @body.m_torque=(2000000*dt*@steering)#
+    @exhaustStrength += (if @thrust then 1 else -1)* 3 * dt
+    @exhaustStrength = Math.min(Math.max(@exhaustStrength,0), 1)
+    global.exhaustMaterial.opacity = @exhaustStrength
     thrust = 80000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
     p1 = new b2Vec2(x*b2Scale, y*b2Scale)
     @body.ApplyForce(f, p1)
     super dt
+    # Update exhaust plume
+    @exhaustCycle += dt*10
+    @exhaustCycle %= 25
+    frame = Math.floor @exhaustCycle
+    v = exhaustFrameUvs[frame]
+    w = 64 /atlas_w
+    h = 64 /atlas_h
+    @exhaustGeometry.faceVertexUvs = [[[
+      vector2 v.x, 1-v.y
+      vector2 v.x+w,1-v.y
+      vector2 v.x+w,1-v.y-h
+      vector2 v.x,1-v.y-h
+    ]]]
+    @exhaustGeometry.uvsNeedUpdate = true
+    @exhaustMesh.position.x = x
+    @exhaustMesh.position.y = y
+    @exhaustMesh.position.z = -40
+    @exhaustMesh.rotation.z = a+Math.PI/2
 
 class Rocket extends RotationalSprite
   constructor: (config) ->
     config.game = config.game
     config.atlasUvs =  rocketFrameUvs
-    config.width = 7
+    config.width = 4
     config.height = 18
     config.sideLength = 100
     config.spriteW = 100 / atlas_w
     config.spriteH = 100 / atlas_h
-    config.mass = 20000000
-    config.angleOffset =0
+    config.friction = 0.1
+    config.mass = 10000000
+    config.angleOffset = 0
     super config
     @mesh.position.z = -1
-  update: (dt)->
+  createBody: (config)->
+    bodyDef = new b2BodyDef
+    @bodyDef = bodyDef
+    bodyDef.type = b2Body.b2_dynamicBody
+    bodyDef.position.x = config.x * b2Scale
+    bodyDef.position.y = config.y * b2Scale
+    bodyDef.angle = 0
+    body = @game.world.CreateBody(bodyDef)
+    body.test = "test"
+    @body = body
+    body.w = config.width * b2Scale
+    body.h = config.height * b2Scale
+    fixtureDef = new b2FixtureDef
+    fixtureDef.restitution = 0.1
+    fixtureDef.density = config.mass / body.w / body.h
+    fixtureDef.friction = config.friction
+    shape = new b2PolygonShape.AsBox(body.w, body.h)
+    fixtureDef.shape = shape
+    body.CreateFixture(fixtureDef)
+  update: (dt)=>
     #console.log @body.GetAngle() / Math.PI/2 * 360
     super dt
 
