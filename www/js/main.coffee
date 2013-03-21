@@ -2,7 +2,11 @@
 window.global =
   width: 1020
   height: 600
+  resourceCounter: 0
 
+signedMod = (a,b)->
+  return if a < 0 then b+a%b else a%b
+console.log '>',signedMod(-5, 10)
 b2Scale = 0.01
 global.renderer = new THREE.CanvasRenderer
   canvas: $("canvas")[0]
@@ -37,30 +41,12 @@ pushFaces = (geometry, faces)->
     geometry.faces.push(f)
 
 
-
-landerGeometry = new THREE.Geometry()
-
-pushVertices landerGeometry, [
-  vertex -15, -15
-  vertex 15, -15
-  vertex 15, 15
-  vertex -15, 15
-]
-
-pushFaces landerGeometry, [
-  face4 3,2,1,0
-]
-
-
 atlas = THREE.ImageUtils.loadTexture "img/textures.png"
 
 atlas_w = 1022
 atlas_h = 1520
 
-landerGeometry = new THREE.PlaneGeometry(30, 30, 1, 1)
 vector2 = (x,y)-> new THREE.Vector2(x,y)
-spriteW = 64 / atlas_w
-spriteH = 64 / atlas_h
 
 
 jsonLoader = new THREE.JSONLoader()
@@ -74,6 +60,11 @@ global.landerMaterial = new THREE.MeshBasicMaterial
     overdraw: true
 
 
+global.debugMaterial = new THREE.MeshBasicMaterial
+    color: 0xffffff
+    wireframe: true#shading: THREE.FlatShading
+    side: THREE.DoubleSide
+
 terrainSurface = THREE.ImageUtils.loadTexture "img/lunarsurface.png"
 terrainSurface.wrapS = THREE.RepeatWrapping 
 terrainSurface.wrapT = THREE.RepeatWrapping 
@@ -84,13 +75,7 @@ global.levelMaterial = new THREE.MeshBasicMaterial
     overdraw: true
     map: terrainSurface
 
-global.resourceCount = 0
 
-countDown = (func)->
-  global.resourceCount += 1
-  return ->
-    func(arguments...)
-    global.resourceCount -= 1
     
 zeroFill = (i,n)->
   a = []
@@ -98,18 +83,31 @@ zeroFill = (i,n)->
     a.push "0"
   return a.join("")+i
 
+
+countedCallback = (func)->
+  global.resourceCounter+=1
+  return ->
+    global.resourceCounter -= 1
+    func(arguments...)
+    console.log "Resources left:", global.resourceCounter
+    if global.resourceCounter == 0
+      launch()
+
 landerFrameUvs = []
-$.getJSON 'js/textures.json', {}, countDown (data)->
-  for i in [1..100]
-    s = 'lander'+zeroFill(i, 4)+'.png'
-    frame = data.frames[s].frame
-    landerFrameUvs.push vector2(frame.x / atlas_w, frame.y / atlas_h)
+rocketFrameUvs = []
+$.getJSON 'js/textures.json', {}, countedCallback (data)->
+  for [name, array] in [["lander", landerFrameUvs], ["rocket", rocketFrameUvs] ]
+    for i in [1..100]
+      s = name+zeroFill(i, 4)+'.png'
+      frame = data.frames[s].frame
+      array.push vector2(frame.x / atlas_w, frame.y / atlas_h)
 
 class Game
   constructor: ()->
     gravity = new b2Vec2(0, 10*b2Scale)
     # create a temporary ground
     @world = new b2World(gravity, true)
+    @entities = []
     @lander = new Lander(@)
 
     body = $("body")
@@ -123,6 +121,7 @@ class Game
     body.keyup @keyUp
     @pressedKeys = {}
     new THREE.JSONLoader().load "js/level1.js", (model)=>
+      # Take Terrain from Mesh
       @level = new THREE.Mesh(model, global.levelMaterial)
       global.scene.add(@level)
       @level.position.x = 0
@@ -130,8 +129,12 @@ class Game
       @level.position.z = -1
       @level.scale.y = -1
       @level.scale.x = 1
-    
+
       verts = model.vertices
+      # Detect "Outer" edges by counting the occurrences of the vertex
+      # combinations. Outer edges are used exactly once, while inner edges
+      # pair up.
+      #
       edges = {}
       countEdge =(a,b)->
         v = [a,b]
@@ -139,16 +142,31 @@ class Game
         [a,b] = v
         s = "#{a}-#{b}"
         edges[s] = if edges[s]? then edges[s]+1 else 1
+
       for face in model.faces
         countEdge face.a, face.b
         countEdge face.b, face.c
         countEdge face.c, face.a
+
       for edge,count of edges
         if count==1
           [a,b] = edge.split("-")
           v1 = new b2Vec2(verts[a].x * b2Scale, -verts[a].y * b2Scale)
           v2 = new b2Vec2(verts[b].x * b2Scale, -verts[b].y * b2Scale)
           @makeEdge(v1, v2)
+
+      # Data about entities is kept as bones
+      # No particular reason for using bones except it works nicely and without
+      # modifying threejs, blender or the exporter
+
+      for bone in model.bones
+        [x,y] = bone.pos
+        new Rocket
+          game: @
+          x: x #x * b2Scale
+          y: -y
+    @debugGeometry = new THREE.Geometry()
+    @debugMesh = new THREE.Mesh(@debugGeometry, global.debugMaterial)
   keyDown: (event)=>
     @pressedKeys[event.keyCode] = true
   keyUp: (event)=>
@@ -170,7 +188,18 @@ class Game
     @lander.thrust = if @pressedKeys[38] then 1 else 0
     @world.Step(dt, 5, 5)
     @world.ClearForces()
-    @lander.update(dt)
+    for entity in @entities
+      entity.update dt
+
+    @debugGeometry.vertices =[]
+    @debugGeometry.faces = []
+    pushVertices @debugGeometry,[ 
+        vertex 0,0, -1
+        vertex 100,0, -1
+        vertex 0,100,-1]
+    pushFaces @debugGeometry,[
+        face3 0,1,2]
+    @debugGeometry.verticesNeedUpdate = true
     global.camera.position.x = @lander.mesh.position.x
     global.camera.position.y = @lander.mesh.position.y
     global.renderer.render(global.scene, global.camera)
@@ -195,14 +224,19 @@ class Game
     fixtureDef.shape = shape
     body.CreateFixture(fixtureDef)
 
-class Sprite
+class RotationalSprite
   constructor: (config)->
     @game = config.game
+    @game.entities.push @
+    @atlasUvs = config.atlasUvs
+    @spriteW = config.spriteW
+    @spriteH = config.spriteH
+    @angleOffset = config.angleOffset
     bodyDef = new b2BodyDef
     @bodyDef = bodyDef
     bodyDef.type = b2Body.b2_dynamicBody
-    bodyDef.position.x = 0
-    bodyDef.position.y = -100 * b2Scale
+    bodyDef.position.x = config.x * b2Scale
+    bodyDef.position.y = config.y * b2Scale
     bodyDef.angle = 0
     body = @game.world.CreateBody(bodyDef)
     body.test = "test"
@@ -211,46 +245,81 @@ class Sprite
     body.h = config.height * b2Scale
     fixtureDef = new b2FixtureDef
     fixtureDef.restitution = 0.1
-    fixtureDef.density = 1000000/ body.w / body.h
+    fixtureDef.density = config.mass / body.w / body.h
     fixtureDef.friction = 0.7
     shape = new b2PolygonShape.AsBox(body.w, body.h)
     fixtureDef.shape = shape
     body.CreateFixture(fixtureDef)
-    @mesh = new THREE.Mesh(landerGeometry, global.landerMaterial)
+    @geometry = new THREE.PlaneGeometry(config.sideLength/2, config.sideLength/2, 1, 1)
+    @mesh = new THREE.Mesh(@geometry, global.landerMaterial)
     global.scene.add(@mesh)
     @steering = 0
+
+  setPosition: (x,y) ->
+    @body.SetPosition (new b2Vec2(x,y))
 
   update: (dt)->
     x = @body.GetPosition().x / b2Scale
     y = @body.GetPosition().y / b2Scale
     @mesh.position.x = x
     @mesh.position.y = y
-    a = @body.GetAngle()
-    @body.m_torque=(2000000*dt*@steering)
-    thrust = 200000000*dt*@thrust
-    f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
-    p1 = new b2Vec2(x*b2Scale, y*b2Scale)
-    @body.ApplyForce(f, p1)
-    if landerFrameUvs.length>0
-      if a<0
-        a = Math.PI*2 + (a % (Math.PI*2))
-      frame = Math.floor(a/Math.PI/2 *100+25)%100
-      v = landerFrameUvs[frame]
-      landerGeometry.faceVertexUvs = [[[
+    a = @body.GetAngle()+Math.PI/2
+    if @atlasUvs.length>0
+      a = signedMod(a,Math.PI*2)
+      frame = signedMod(Math.floor((a/Math.PI/2) *100)+@angleOffset, 100)
+      v = @atlasUvs[frame]
+      @geometry.faceVertexUvs = [[[
         vector2 v.x, 1-v.y
-        vector2 v.x+spriteW,1-v.y
-        vector2 v.x+spriteW,1-v.y-spriteH
-        vector2 v.x,1-v.y-spriteH
+        vector2 v.x+@spriteW,1-v.y
+        vector2 v.x+@spriteW,1-v.y-@spriteH
+        vector2 v.x,1-v.y-@spriteH
       ]]]
-      landerGeometry.uvsNeedUpdate = true
+      @geometry.uvsNeedUpdate = true
       # Adjust residual rotation
-      @mesh.rotation.z = a-((frame-25)/100.0 * Math.PI * 2)
+      @mesh.rotation.z = a-((frame-@angleOffset)/100.0 * Math.PI * 2)
 
-class Lander extends Sprite
+class Lander extends RotationalSprite
   constructor: (game) ->
     super
       game: game
+      atlasUvs: landerFrameUvs
       width: 11
       height: 6
-game = new Game()
-game.launch()
+      mass : 1000000
+      spriteW: 64 / atlas_w
+      spriteH: 64 / atlas_h
+      x: 0
+      y: 0
+      angleOffset: 0
+      sideLength: 64
+  update: (dt)->
+    x = @body.GetPosition().x / b2Scale
+    y = @body.GetPosition().y / b2Scale
+    a = @body.GetAngle()
+    @body.m_torque=(2000000*dt*@steering)
+    thrust = 80000000*dt*@thrust
+    f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
+    p1 = new b2Vec2(x*b2Scale, y*b2Scale)
+    @body.ApplyForce(f, p1)
+    super dt
+
+class Rocket extends RotationalSprite
+  constructor: (config) ->
+    config.game = config.game
+    config.atlasUvs =  rocketFrameUvs
+    config.width = 7
+    config.height = 18
+    config.sideLength = 100
+    config.spriteW = 100 / atlas_w
+    config.spriteH = 100 / atlas_h
+    config.mass = 20000000
+    config.angleOffset =0
+    super config
+    @mesh.position.z = -1
+  update: (dt)->
+    #console.log @body.GetAngle() / Math.PI/2 * 360
+    super dt
+
+launch = ->
+    game = new Game()
+    game.launch()
