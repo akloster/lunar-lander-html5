@@ -12,15 +12,25 @@ This little demonstration game is in early stages of production. Working feature
 * Box2d Physics for collision detection between the edges of the terrain mesh
   and the lander, but the lander collision mesh needs more work
 * Works with ThreeJs' WebGLRenderer and canvas renderer
-
-
+* Missile bases are parsed from bone positions in the mesh so that they can be
+  positioned inside blender
+* Missile bases explode after you land on them. Needs delay and better
+  animation
+  
 To run it, clone the repository and run python -m SimpleHTTPServer from the www directory,
 then point your browser at http://localhost:8000
 
 
 Notes:
-* To export the level mesh to threejs format you will need to copy the exporter
+* To export the level mesh to Threejs format you will need to copy the exporter
 plugin from the ThreeJs source directory into the appropriate directory in
 the blender distribution
 * UV mapping for the terrain is done in Blender, so you need to update the UV
 mesh every time you change the mesh
+
+Credits:
+All artwork and programming was done by me, except:
+    
+- Background is created with "Earth in Cycles" by Adriano from Blendswap. The
+  license requires attribution, but the submission does not state a full name.
+- 

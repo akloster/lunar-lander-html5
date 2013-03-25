@@ -96,9 +96,35 @@ body {
     background-color: #000000;
     color: white;
 }
+
+@font-face {
+    font-family: vt220;
+    src: url(http://www.spacerogue.net/images/Glass_TTY_VT220.ttf)
+}
+.main {
+    width: 1024px;
+    height: 800px;
+    background-image: url('../img/background.jpg');
+    padding: 0px;
+    margin-left: auto;
+    margin-right: auto;
+    font-family: vt220;
+
+}
+.header{
+    margin: 0px;
+    padding: 0px;
+    height: 200px;
+}
 canvas {
-    border: 1px solid white;
-    margin-left:100px;
+    margin: 0px;
+}
+
+#terminal {
+    position: relative;
+    align: center;
+    left: 300px;
+    top: -430px;
 }
 
 
