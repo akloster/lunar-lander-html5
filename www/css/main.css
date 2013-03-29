@@ -126,6 +126,12 @@ canvas {
     left: 300px;
     top: -430px;
 }
+#status {
+    position: relative;
+    align: center;
+    left: -400px;
+    top: -630px;
+}
 
 
 

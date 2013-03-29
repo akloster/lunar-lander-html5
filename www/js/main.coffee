@@ -13,7 +13,7 @@ global.renderer = new THREE.CanvasRenderer
   canvas: $("canvas")[0]
 
 global.renderer.setSize(global.width, global.height)
-ctx = $("canvas")[0].getContext('2d')
+ctx = $("canvas#status")[0].getContext('2d')
 
 vertex = (x,y,z)->
   if z is undefined
@@ -56,12 +56,12 @@ global.landerMaterial = new THREE.MeshBasicMaterial
 
 global.exhaustMaterial = global.landerMaterial.clone()
 global.exhaustMaterial.opacity = 0.2
+global.exhaustMaterial.blending = THREE.AdditiveBlending
 global.debugMaterial = new THREE.MeshBasicMaterial
     color: 0xffffff
     wireframe: true
     shading: THREE.FlatShading
     side: THREE.DoubleSide
-
 terrainSurface = THREE.ImageUtils.loadTexture "img/lunarsurface.png"
 terrainSurface.wrapS = THREE.RepeatWrapping 
 terrainSurface.wrapT = THREE.RepeatWrapping 
@@ -172,7 +172,11 @@ class Game
       for face in model.faces
         countEdge face.a, face.b
         countEdge face.b, face.c
-        countEdge face.c, face.a
+        if face.d?
+            countEdge face.c, face.d
+            countEdge face.d, face.a
+        else
+            countEdge face.c, face.a
 
       for edge,count of edges
         if count==1
@@ -190,7 +194,7 @@ class Game
         new Rocket
           game: @
           x: x
-          y: -y-10
+          y: -y-13
         new MissileBase
           game: @
           x: x
@@ -210,8 +214,9 @@ class Game
         return totalImpulse
       if isContactBetween 'terrain', 'landingGear'
         totalImpulse = sumImpulses contact
-        #if totalImpulse>600000
-          #console.log "deadly damage to landing gear"
+        threshold = 5000000
+        if totalImpulse>threshold
+          @lander.damage += (totalImpulse-threshold) / 100000
 
                   
     @world.SetContactListener(@listener)
@@ -259,6 +264,7 @@ class Game
     ctx.fillStyle = "#00ff22"
     ctx.font = "bold 12pt vt220"
     ctx.fillText("Fuel: #{@lander.fuel.toFixed(1)}s", 0,15)
+    ctx.fillText("Damage: #{@lander.damage.toFixed(1)}%", 0,30)
     @terminal.update(dt)
     @terminal.draw()
 
@@ -332,6 +338,7 @@ class Lander extends RotationalSprite
       sideLength: 64
       friction: 0.2
     @fuel = 25
+    @damage = 0
     @exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1)
     @exhaustMesh = new THREE.Mesh(@exhaustGeometry, global.exhaustMaterial)
     @exhaustStrength = 0
@@ -385,7 +392,7 @@ class Lander extends RotationalSprite
     @exhaustStrength += (if @thrust then 1 else -1)* 5 * dt
     @exhaustStrength = Math.min(Math.max(@exhaustStrength,0), 1)
     global.exhaustMaterial.opacity = @exhaustStrength
-    thrust = 80000000*dt*@thrust
+    thrust = 100000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
     p1 = new b2Vec2(x*b2Scale, y*b2Scale)
     @body.ApplyForce(f, p1)
@@ -406,7 +413,7 @@ class Lander extends RotationalSprite
     @exhaustGeometry.uvsNeedUpdate = true
     @exhaustMesh.position.x = x
     @exhaustMesh.position.y = y
-    @exhaustMesh.position.z = -1
+    @exhaustMesh.position.z = 10
     @exhaustMesh.rotation.z = a+Math.PI/2
 
 class Rocket extends RotationalSprite
@@ -489,7 +496,7 @@ class MissileBase extends AnimatedSprite
     super
       game: config.game
       x: config.x
-      y: config.y-5
+      y: config.y-10
       z: -2
       spriteW: 80
       spriteH: 80
@@ -503,13 +510,13 @@ class MissileBase extends AnimatedSprite
       @frame = Math.min(@frame, 63)
     super dt
     if @game.lander.velD< 0.01
-      if Math.abs(@x-@game.lander.mesh.position.x)<5
-        if Math.abs(@y-@game.lander.mesh.position.y-5)<15
-          if Math.abs(@game.lander.body.GetAngle())<Math.PI/360*10
+      if Math.abs(@x-@game.lander.mesh.position.x)<7
+        if Math.abs(@y-@game.lander.mesh.position.y-5)<20
+          if Math.abs(signedMod(@game.lander.body.GetAngle(), Math.PI*2))<Math.PI/360*10
             unless @exploded
               @game.basesDestroyed += 1
               @exploded = true
-              @game.lander.fuel = 20
+              @game.lander.fuel =Math.min(@game.lander.fuel+15, 45)
               print = (s)=> @game.terminal.display(s)
               switch @game.basesDestroyed
                 when 1
@@ -530,20 +537,25 @@ class Terminal
       @column += dt*15
       currentLineWidth = @displayedLines[@displayedLines.length-1].length
       @removalTime += dt
-      if @removalTime > 100
-        line = @displayedLines.shift()
-        if @displayedLines.length==1
-          @column = @displayedLines[0].length+1
-        @removalTime = 0 
+      if @removalTime > 5
+        if @displayedLines.length>0
+            line = @displayedLines.shift()
+            if @displayedLines.length >0
+              currentLineWidth = @displayedLines[@displayedLines.length-1].length
+            else
+              currentLineWidth = -1
+        @removalTime = 0
     else
       currentLineWidth = -1
       @removalTime = 0
     if @column > currentLineWidth
-      @column = currentLineWidth
+      @column = Math.max(0,currentLineWidth)
       if @queuedLines.length > 0
         line = @queuedLines.shift()
         @displayedLines.push line
         @column = 0
+        if @displayedLines.length==1
+          @removalTime = 0
   display: (line)=>
     console.log line
     @queuedLines.push line

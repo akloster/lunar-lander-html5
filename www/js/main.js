@@ -27,7 +27,7 @@
 
   global.renderer.setSize(global.width, global.height);
 
-  ctx = $("canvas")[0].getContext('2d');
+  ctx = $("canvas#status")[0].getContext('2d');
 
   vertex = function(x, y, z) {
     if (z === void 0) {
@@ -92,6 +92,8 @@
   global.exhaustMaterial = global.landerMaterial.clone();
 
   global.exhaustMaterial.opacity = 0.2;
+
+  global.exhaustMaterial.blending = THREE.AdditiveBlending;
 
   global.debugMaterial = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -232,7 +234,12 @@
           face = _ref[_i];
           countEdge(face.a, face.b);
           countEdge(face.b, face.c);
-          countEdge(face.c, face.a);
+          if (face.d != null) {
+            countEdge(face.c, face.d);
+            countEdge(face.d, face.a);
+          } else {
+            countEdge(face.c, face.a);
+          }
         }
         for (edge in edges) {
           count = edges[edge];
@@ -251,7 +258,7 @@
           new Rocket({
             game: _this,
             x: x,
-            y: -y - 10
+            y: -y - 13
           });
           _results.push(new MissileBase({
             game: _this,
@@ -263,7 +270,7 @@
       });
       this.listener = new b2ContactListener();
       this.listener.PostSolve = function(contact, impulse) {
-        var fixA, fixB, isContactBetween, sumImpulses, totalImpulse;
+        var fixA, fixB, isContactBetween, sumImpulses, threshold, totalImpulse;
 
         fixA = contact.GetFixtureA();
         fixB = contact.GetFixtureB();
@@ -282,7 +289,11 @@
           return totalImpulse;
         };
         if (isContactBetween('terrain', 'landingGear')) {
-          return totalImpulse = sumImpulses(contact);
+          totalImpulse = sumImpulses(contact);
+          threshold = 5000000;
+          if (totalImpulse > threshold) {
+            return _this.lander.damage += (totalImpulse - threshold) / 100000;
+          }
         }
       };
       this.world.SetContactListener(this.listener);
@@ -355,6 +366,7 @@
       ctx.fillStyle = "#00ff22";
       ctx.font = "bold 12pt vt220";
       ctx.fillText("Fuel: " + (this.lander.fuel.toFixed(1)) + "s", 0, 15);
+      ctx.fillText("Damage: " + (this.lander.damage.toFixed(1)) + "%", 0, 30);
       this.terminal.update(dt);
       return this.terminal.draw();
     };
@@ -446,6 +458,7 @@
         friction: 0.2
       });
       this.fuel = 25;
+      this.damage = 0;
       this.exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1);
       this.exhaustMesh = new THREE.Mesh(this.exhaustGeometry, global.exhaustMaterial);
       this.exhaustStrength = 0;
@@ -506,7 +519,7 @@
       this.exhaustStrength += (this.thrust ? 1 : -1) * 5 * dt;
       this.exhaustStrength = Math.min(Math.max(this.exhaustStrength, 0), 1);
       global.exhaustMaterial.opacity = this.exhaustStrength;
-      thrust = 80000000 * dt * this.thrust;
+      thrust = 100000000 * dt * this.thrust;
       f = new b2Vec2(thrust * Math.sin(a), -thrust * Math.cos(a));
       p1 = new b2Vec2(x * b2Scale, y * b2Scale);
       this.body.ApplyForce(f, p1);
@@ -521,7 +534,7 @@
       this.exhaustGeometry.uvsNeedUpdate = true;
       this.exhaustMesh.position.x = x;
       this.exhaustMesh.position.y = y;
-      this.exhaustMesh.position.z = -1;
+      this.exhaustMesh.position.z = 10;
       return this.exhaustMesh.rotation.z = a + Math.PI / 2;
     };
 
@@ -623,7 +636,7 @@
       MissileBase.__super__.constructor.call(this, {
         game: config.game,
         x: config.x,
-        y: config.y - 5,
+        y: config.y - 10,
         z: -2,
         spriteW: 80,
         spriteH: 80,
@@ -644,13 +657,13 @@
       }
       MissileBase.__super__.update.call(this, dt);
       if (this.game.lander.velD < 0.01) {
-        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 5) {
-          if (Math.abs(this.y - this.game.lander.mesh.position.y - 5) < 15) {
-            if (Math.abs(this.game.lander.body.GetAngle()) < Math.PI / 360 * 10) {
+        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 7) {
+          if (Math.abs(this.y - this.game.lander.mesh.position.y - 5) < 20) {
+            if (Math.abs(signedMod(this.game.lander.body.GetAngle(), Math.PI * 2)) < Math.PI / 360 * 10) {
               if (!this.exploded) {
                 this.game.basesDestroyed += 1;
                 this.exploded = true;
-                this.game.lander.fuel = 20;
+                this.game.lander.fuel = Math.min(this.game.lander.fuel + 15, 45);
                 print = function(s) {
                   return _this.game.terminal.display(s);
                 };
@@ -688,10 +701,14 @@
         this.column += dt * 15;
         currentLineWidth = this.displayedLines[this.displayedLines.length - 1].length;
         this.removalTime += dt;
-        if (this.removalTime > 100) {
-          line = this.displayedLines.shift();
-          if (this.displayedLines.length === 1) {
-            this.column = this.displayedLines[0].length + 1;
+        if (this.removalTime > 5) {
+          if (this.displayedLines.length > 0) {
+            line = this.displayedLines.shift();
+            if (this.displayedLines.length > 0) {
+              currentLineWidth = this.displayedLines[this.displayedLines.length - 1].length;
+            } else {
+              currentLineWidth = -1;
+            }
           }
           this.removalTime = 0;
         }
@@ -700,11 +717,14 @@
         this.removalTime = 0;
       }
       if (this.column > currentLineWidth) {
-        this.column = currentLineWidth;
+        this.column = Math.max(0, currentLineWidth);
         if (this.queuedLines.length > 0) {
           line = this.queuedLines.shift();
           this.displayedLines.push(line);
-          return this.column = 0;
+          this.column = 0;
+          if (this.displayedLines.length === 1) {
+            return this.removalTime = 0;
+          }
         }
       }
     };
