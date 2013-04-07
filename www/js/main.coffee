@@ -212,13 +212,16 @@ class Game
         for point in points
             totalImpulse+=point.m_normalImpulse
         return totalImpulse
-      if isContactBetween 'terrain', 'landingGear'
-        totalImpulse = sumImpulses contact
-        threshold = 5000000
-        if totalImpulse>threshold
-          @lander.damage += (totalImpulse-threshold) / 100000
 
+      if isContactBetween('terrain', 'landingGear') or isContactBetween('terrain', 'landerSphere')
+        @lander.frameImpulse += sumImpulses contact
+        vel = @lander.body.GetLinearVelocity()
+        velocity = Math.sqrt(vel.x*vel.x + vel.y*vel.y)
+        maxVel = 0.5
+        if (velocity)>maxVel
+          @lander.damage += Math.max(10, (velocity-maxVel)/10)
                   
+
     @world.SetContactListener(@listener)
   keyDown: (event)=>
     @pressedKeys[event.keyCode] = true
@@ -252,10 +255,24 @@ class Game
       @lander.steering = 1
     
     @lander.thrust = if @pressedKeys[38] then 1 else 0
-    @world.Step(dt, 5, 5)
+    if @lander.destroyed
+      @lander.thrust = 0
+      @lander.steering = 0
+    @lander.frameImpulse = 0
+    steps = dt* 60*60*5
+    @world.Step(dt, steps, steps)
     @world.ClearForces()
     for entity in @entities
       entity.update dt
+    if @lander.damage>=100
+      @lander.damage = 100
+      unless @lander.destroyed?
+        @terminal.display("Houston, we have a problem...")
+        @terminal.display("The Lander is kaputt. Press 'r'")
+        @lander.destroyed=true
+        
+
+
 
     @camera.position.x = @lander.mesh.position.x
     @camera.position.y = @lander.mesh.position.y
@@ -337,7 +354,7 @@ class Lander extends RotationalSprite
       angleOffset: 0
       sideLength: 64
       friction: 0.2
-    @fuel = 25
+    @fuel = 30
     @damage = 0
     @exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1)
     @exhaustMesh = new THREE.Mesh(@exhaustGeometry, global.exhaustMaterial)
@@ -381,7 +398,7 @@ class Lander extends RotationalSprite
     vel = @game.lander.body.GetLinearVelocity()
     @velD = Math.sqrt(vel.x*vel.x+vel.y*vel.y)
     @vel = vel
-    @body.m_torque=(2000000*dt*@steering)
+    @body.m_torque=(2500000*dt*@steering)
     @fuel -= (if @thrust then 1 else 0)*dt
     @fuel = Math.max(0,@fuel)
     if @fuel == 0
@@ -392,7 +409,7 @@ class Lander extends RotationalSprite
     @exhaustStrength += (if @thrust then 1 else -1)* 5 * dt
     @exhaustStrength = Math.min(Math.max(@exhaustStrength,0), 1)
     global.exhaustMaterial.opacity = @exhaustStrength
-    thrust = 100000000*dt*@thrust
+    thrust = 120000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
     p1 = new b2Vec2(x*b2Scale, y*b2Scale)
     @body.ApplyForce(f, p1)
@@ -416,6 +433,8 @@ class Lander extends RotationalSprite
     @exhaustMesh.position.z = 10
     @exhaustMesh.rotation.z = a+Math.PI/2
 
+    if @frameImpulse>1500000
+      @damage+=5
 class Rocket extends RotationalSprite
   constructor: (config) ->
     config.game = config.game

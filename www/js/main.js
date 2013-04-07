@@ -270,7 +270,7 @@
       });
       this.listener = new b2ContactListener();
       this.listener.PostSolve = function(contact, impulse) {
-        var fixA, fixB, isContactBetween, sumImpulses, threshold, totalImpulse;
+        var fixA, fixB, isContactBetween, maxVel, sumImpulses, vel, velocity;
 
         fixA = contact.GetFixtureA();
         fixB = contact.GetFixtureB();
@@ -288,11 +288,13 @@
           }
           return totalImpulse;
         };
-        if (isContactBetween('terrain', 'landingGear')) {
-          totalImpulse = sumImpulses(contact);
-          threshold = 5000000;
-          if (totalImpulse > threshold) {
-            return _this.lander.damage += (totalImpulse - threshold) / 100000;
+        if (isContactBetween('terrain', 'landingGear') || isContactBetween('terrain', 'landerSphere')) {
+          _this.lander.frameImpulse += sumImpulses(contact);
+          vel = _this.lander.body.GetLinearVelocity();
+          velocity = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+          maxVel = 0.5;
+          if (velocity > maxVel) {
+            return _this.lander.damage += Math.max(10, (velocity - maxVel) / 10);
           }
         }
       };
@@ -321,7 +323,7 @@
     };
 
     Game.prototype.mainLoop = function(newFrame) {
-      var dt, entity, game, _i, _len, _ref;
+      var dt, entity, game, steps, _i, _len, _ref;
 
       if (newFrame != null) {
         dt = (newFrame - this.lastFrame) / 1000;
@@ -352,12 +354,26 @@
         this.lander.steering = 1;
       }
       this.lander.thrust = this.pressedKeys[38] ? 1 : 0;
-      this.world.Step(dt, 5, 5);
+      if (this.lander.destroyed) {
+        this.lander.thrust = 0;
+        this.lander.steering = 0;
+      }
+      this.lander.frameImpulse = 0;
+      steps = dt * 60 * 60 * 5;
+      this.world.Step(dt, steps, steps);
       this.world.ClearForces();
       _ref = this.entities;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         entity = _ref[_i];
         entity.update(dt);
+      }
+      if (this.lander.damage >= 100) {
+        this.lander.damage = 100;
+        if (this.lander.destroyed == null) {
+          this.terminal.display("Houston, we have a problem...");
+          this.terminal.display("The Lander is kaputt. Press 'r'");
+          this.lander.destroyed = true;
+        }
       }
       this.camera.position.x = this.lander.mesh.position.x;
       this.camera.position.y = this.lander.mesh.position.y;
@@ -457,7 +473,7 @@
         sideLength: 64,
         friction: 0.2
       });
-      this.fuel = 25;
+      this.fuel = 30;
       this.damage = 0;
       this.exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1);
       this.exhaustMesh = new THREE.Mesh(this.exhaustGeometry, global.exhaustMaterial);
@@ -506,7 +522,7 @@
       vel = this.game.lander.body.GetLinearVelocity();
       this.velD = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
       this.vel = vel;
-      this.body.m_torque = 2000000 * dt * this.steering;
+      this.body.m_torque = 2500000 * dt * this.steering;
       this.fuel -= (this.thrust ? 1 : 0) * dt;
       this.fuel = Math.max(0, this.fuel);
       if (this.fuel === 0) {
@@ -519,7 +535,7 @@
       this.exhaustStrength += (this.thrust ? 1 : -1) * 5 * dt;
       this.exhaustStrength = Math.min(Math.max(this.exhaustStrength, 0), 1);
       global.exhaustMaterial.opacity = this.exhaustStrength;
-      thrust = 100000000 * dt * this.thrust;
+      thrust = 120000000 * dt * this.thrust;
       f = new b2Vec2(thrust * Math.sin(a), -thrust * Math.cos(a));
       p1 = new b2Vec2(x * b2Scale, y * b2Scale);
       this.body.ApplyForce(f, p1);
@@ -535,7 +551,10 @@
       this.exhaustMesh.position.x = x;
       this.exhaustMesh.position.y = y;
       this.exhaustMesh.position.z = 10;
-      return this.exhaustMesh.rotation.z = a + Math.PI / 2;
+      this.exhaustMesh.rotation.z = a + Math.PI / 2;
+      if (this.frameImpulse > 1500000) {
+        return this.damage += 5;
+      }
     };
 
     return Lander;
