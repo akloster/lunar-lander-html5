@@ -1,32 +1,35 @@
 A Lunar Lander Game
 ===================
+
+Copyright (C) 2013 by Andreas Klostermann, all materials distributed under the Creative Commons CC BY-NC-SA license.
+
 It's not rocket science, just Html5 ...
 ---------------------------------------
 
-
-This little demonstration game is in early stages of production. Working features:
-
+Notes and Features:
 * The Lunar lander was modeled in Blender and raytraced into 100 frames of
   rotation
-* Terrain is a mesh exported from Blender
+* Terrain is a mesh exported from Blender and rendered via Three.js Canvas
+  renderer
 * Box2d Physics for collision detection between the edges of the terrain mesh
-  and the lander, but the lander collision mesh needs more work
-* Works with ThreeJs' WebGLRenderer and canvas renderer
+  and the lander
 * Missile bases are parsed from bone positions in the mesh so that they can be
   positioned inside blender
-* Missile bases explode after you land on them. Needs delay and better
-  animation
-  
-To run it, clone the repository and run python -m SimpleHTTPServer from the www directory,
+* Missile bases explode after you land on them  
+* Three different levels/terrain meshes
+
+
+To run it locally, clone the repository and run python -m SimpleHTTPServer from the www directory,
 then point your browser at http://localhost:8000
 
 
-Notes:
+Notes for development:
 * To export the level mesh to Threejs format you will need to copy the exporter
 plugin from the ThreeJs source directory into the appropriate directory in
 the blender distribution
 * UV mapping for the terrain is done in Blender, so you need to update the UV
 mesh every time you change the mesh
+
 
 Credits:
 All artwork and programming was done by me, except:
