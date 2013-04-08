@@ -11,7 +11,7 @@
 
 
 (function() {
-  var AnimatedSprite, Game, Lander, MissileBase, Rocket, RotationalSprite, Terminal, atlas, atlas_h, atlas_w, b2Scale, baseFrameUvs, countedCallback, ctx, exhaustFrameUvs, face3, face4, jsonLoader, landerFrameUvs, launch, playLooped, pushFaces, pushVertices, rocketFrameUvs, terrainSurface, vector2, vertex, zeroFill,
+  var AnimatedSprite, Game, Lander, MissileBase, Rocket, RotationalSprite, Terminal, atlas, atlas_h, atlas_w, b2Scale, baseFrameUvs, countedCallback, ctx, exhaustFrameUvs, jsonLoader, landerFrameUvs, launch, playLooped, pushFaces, rocketFrameUvs, terrainSurface, vector2, zeroFill,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
@@ -608,32 +608,6 @@
   global.renderer.setSize(global.width, global.height);
 
   ctx = $("canvas#status")[0].getContext('2d');
-
-  vertex = function(x, y, z) {
-    if (z === void 0) {
-      z = 0;
-    }
-    return new THREE.Vector3(x, y, z);
-  };
-
-  pushVertices = function(geometry, vertices) {
-    var v, _i, _len, _results;
-
-    _results = [];
-    for (_i = 0, _len = vertices.length; _i < _len; _i++) {
-      v = vertices[_i];
-      _results.push(geometry.vertices.push(v));
-    }
-    return _results;
-  };
-
-  face3 = function(a, b, c) {
-    return new THREE.Face3(a, b, c);
-  };
-
-  face4 = function(a, b, c, d) {
-    return new THREE.Face4(a, b, c, d);
-  };
 
   pushFaces = function(geometry, faces) {
     var f, _i, _len, _results;

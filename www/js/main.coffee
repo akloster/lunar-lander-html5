@@ -15,20 +15,6 @@ global.renderer = new THREE.CanvasRenderer
 global.renderer.setSize(global.width, global.height)
 ctx = $("canvas#status")[0].getContext('2d')
 
-vertex = (x,y,z)->
-  if z is undefined
-    z = 0
-  return new THREE.Vector3(x,y,z)
-
-pushVertices = (geometry, vertices)->
-  for v in vertices
-    geometry.vertices.push(v)
-
-face3 = (a,b,c)->
-  return new THREE.Face3(a,b,c)
-
-face4 = (a,b,c,d)->
-  return new THREE.Face4(a,b,c,d)
 pushFaces = (geometry, faces)->
   for f in faces
     geometry.faces.push(f)
