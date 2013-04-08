@@ -133,14 +133,18 @@ canvas {
     top: -630px;
 }
 
+#winscreen {
+    position:relative;
+    display: none;
+    align: center;
+    left: 20px;
+    top: 100px;
 
-
-
-
-
-
-
-
+}
+#credits {
+    position:relative;
+    top:-200px;
+}
 
 
 

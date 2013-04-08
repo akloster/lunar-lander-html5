@@ -3,6 +3,7 @@ window.global =
   width: 1024
   height: 600
   resourceCounter: 0
+  musicVolume: 0
 
 # Standard javascript modulo operator returns negative values, so we need our
 # own
@@ -86,7 +87,6 @@ countedCallback = (func)->
   return ->
     global.resourceCounter -= 1
     func(arguments...)
-    console.log "Resources left:", global.resourceCounter
     if global.resourceCounter == 0
       launch()
 
@@ -106,9 +106,22 @@ $.getJSON 'js/textures.json', {}, countedCallback (data)->
       s = name+zeroFill(i, 4)+'.png'
       frame = data.frames[s].frame
       array.push vector2(frame.x / atlas_w, frame.y / atlas_h)
+playLooped = (id)-> createjs.Sound.play(id, "none", 0,0,-1)
+createjs.Sound.addEventListener("loadComplete", (event) ->
+  if event.id == "music"
+    global.music = playLooped("music")
+    global.music.setVolume(global.musicVolume)
+  if event.id == "engine"
+    global.engine = playLooped("engine") 
+    global.engine.setVolume(0)
+)
+
+createjs.Sound.registerSound("audio/therapy_season.mp3", "music")
+createjs.Sound.registerSound("audio/engine.mp3", "engine")
 
 class Game
-  constructor: ()->
+  constructor: (levelNumber)->
+    @levelNumber = levelNumber
     gravity = new b2Vec2(0, 15*b2Scale)
     # create a temporary ground
     @quit = false
@@ -134,7 +147,10 @@ class Game
     body.keyup @keyUp
     @pressedKeys = {}
     @terminal = new Terminal()
-    @terminal.display("Destroy the missile bases by landing on them...")
+    if @levelNumber == 1
+      @terminal.display("Destroy the missile bases by landing on them...")
+    else
+      @terminal.display("Level #{@levelNumber}...")
     @scene = new THREE.Scene()
 
     @camera = new THREE.OrthographicCamera(- window.global.width / 4,
@@ -146,7 +162,7 @@ class Game
     @scene.add(@camera)
 
     @lander = new Lander(@)
-    new THREE.JSONLoader().load "js/level1.js", (model)=>
+    new THREE.JSONLoader().load "js/level#{@levelNumber}.js", (model)=>
       # Take Terrain from Mesh
       @level = new THREE.Mesh(model, global.levelMaterial)
       @scene.add(@level)
@@ -188,7 +204,7 @@ class Game
       # Data about entities is kept as bones
       # No particular reason for using bones except it works nicely and without
       # modifying threejs, blender or the exporter
-
+      @basesTotal = model.bones.length
       for bone in model.bones
         [x,y] = bone.pos
         new Rocket
@@ -199,6 +215,8 @@ class Game
           game: @
           x: x
           y: -y
+      # When level loading is finished, start game
+      @launch()
     @listener = new b2ContactListener()
     @listener.PostSolve = (contact, impulse) =>
       fixA = contact.GetFixtureA()
@@ -220,6 +238,7 @@ class Game
         maxVel = 0.5
         if (velocity)>maxVel
           @lander.damage += Math.max(10, (velocity-maxVel)/10)
+      
                   
 
     @world.SetContactListener(@listener)
@@ -230,6 +249,10 @@ class Game
         event.preventDefault()
   keyUp: (event)=>
     @pressedKeys[event.keyCode] = false
+
+  levelUp: =>
+    @levelNumber += 1
+    @quit = true
 
   mainLoop: (newFrame)=>
     if newFrame?
@@ -243,8 +266,14 @@ class Game
     if @pressedKeys[82]
       @quit = true
     if @quit
-      game = new Game()
-      game.launch()
+      if @levelNumber==4
+        # Establish winscreen
+        $("canvas").hide()
+        $("#winscreen").show()
+      else
+        # Restart Game
+        game = new Game(@levelNumber)
+      return
     else
       requestAnimationFrame(@mainLoop)
     @lander.steering = 0
@@ -282,12 +311,18 @@ class Game
     ctx.font = "bold 12pt vt220"
     ctx.fillText("Fuel: #{@lander.fuel.toFixed(1)}s", 0,15)
     ctx.fillText("Damage: #{@lander.damage.toFixed(1)}%", 0,30)
+    ctx.fillText("Bases destroyed: #{@basesDestroyed}/#{@basesTotal}", 0,45)
     @terminal.update(dt)
     @terminal.draw()
 
 
   launch:()->
     @lastFrame = new Date().getTime()
+    if global.music?
+      global.music.setVolume(global.musicVolume)
+    if global.engine?
+      global.engine.setVolume(0)
+      global.engine.play()
     @mainLoop()
 
   makeEdge:(v1,v2)->
@@ -409,6 +444,8 @@ class Lander extends RotationalSprite
     @exhaustStrength += (if @thrust then 1 else -1)* 5 * dt
     @exhaustStrength = Math.min(Math.max(@exhaustStrength,0), 1)
     global.exhaustMaterial.opacity = @exhaustStrength
+    if global.engine?
+      global.engine.setVolume(0.2*@exhaustStrength)
     thrust = 120000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
     p1 = new b2Vec2(x*b2Scale, y*b2Scale)
@@ -435,6 +472,7 @@ class Lander extends RotationalSprite
 
     if @frameImpulse>1500000
       @damage+=5
+
 class Rocket extends RotationalSprite
   constructor: (config) ->
     config.game = config.game
@@ -471,8 +509,6 @@ class Rocket extends RotationalSprite
     body.CreateFixture(fixtureDef)
   update: (dt)=>
     super dt
-
-
 class AnimatedSprite
   constructor: (config)->
     @game = config.game
@@ -534,15 +570,18 @@ class MissileBase extends AnimatedSprite
           if Math.abs(signedMod(@game.lander.body.GetAngle(), Math.PI*2))<Math.PI/360*10
             unless @exploded
               @game.basesDestroyed += 1
+              if @game.basesDestroyed == @game.basesTotal
+                @game.levelUp()
               @exploded = true
               @game.lander.fuel =Math.min(@game.lander.fuel+15, 45)
               print = (s)=> @game.terminal.display(s)
-              switch @game.basesDestroyed
-                when 1
-                  print "The eagle has landed..."
-                when 2
-                  print "One small step for man..."
-                  print "One huge BOOM for mankind..."
+              if @game.levelNumber==1
+                switch @game.basesDestroyed
+                  when 1
+                    print "The eagle has landed..."
+                  when 2
+                    print "One small step for man..."
+                    print "One huge BOOM for mankind..."
 
 class Terminal
   constructor: ->
@@ -576,7 +615,6 @@ class Terminal
         if @displayedLines.length==1
           @removalTime = 0
   display: (line)=>
-    console.log line
     @queuedLines.push line
   draw: ()->
     @ctx.clearRect(0,0,500,500)
@@ -592,5 +630,5 @@ class Terminal
     if numLines >0
         @ctx.fillText(@displayedLines[numLines-1].substr(0,Math.round(@column)), 0, y+lineH)
 launch = ->
-    game = new Game()
-    game.launch()
+    game = new Game(1)
+    game.quit = true
