@@ -2,7 +2,7 @@ window.global =
   width: 1024
   height: 600
   resourceCounter: 0
-  musicVolume: 0
+  musicVolume: 0.2
   rocketZ: -100
   landerZ:-200
   exhaustZ:-30

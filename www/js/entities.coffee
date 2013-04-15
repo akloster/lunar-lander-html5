@@ -238,9 +238,9 @@ class MissileBase extends AnimatedSprite
       @frame+=dt*15
       @frame = Math.min(@frame, 63)
     super dt
-    if @game.lander.velD< 0.0001
-      if Math.abs(@x-@game.lander.mesh.position.x)<8
-        if Math.abs(@y-@game.lander.mesh.position.y-10)<20
+    if @game.lander.velD< 0.01
+      if Math.abs(@x-@game.lander.mesh.position.x)<9
+        if Math.abs(@y-@game.lander.mesh.position.y-10)<30
           if Math.abs(signedMod(@game.lander.body.GetAngle(), Math.PI*2))<Math.PI/360*10
             unless @exploded
               @game.basesDestroyed += 1

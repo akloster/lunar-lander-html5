@@ -286,9 +286,9 @@
         this.frame = Math.min(this.frame, 63);
       }
       MissileBase.__super__.update.call(this, dt);
-      if (this.game.lander.velD < 0.0001) {
-        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 8) {
-          if (Math.abs(this.y - this.game.lander.mesh.position.y - 10) < 20) {
+      if (this.game.lander.velD < 0.01) {
+        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 9) {
+          if (Math.abs(this.y - this.game.lander.mesh.position.y - 10) < 30) {
             if (Math.abs(signedMod(this.game.lander.body.GetAngle(), Math.PI * 2)) < Math.PI / 360 * 10) {
               if (!this.exploded) {
                 this.game.basesDestroyed += 1;
@@ -583,7 +583,7 @@
     width: 1024,
     height: 600,
     resourceCounter: 0,
-    musicVolume: 0,
+    musicVolume: 0.2,
     rocketZ: -100,
     landerZ: -200,
     exhaustZ: -30,
