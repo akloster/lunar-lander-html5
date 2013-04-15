@@ -36,10 +36,9 @@ class Game
                                                   window.global.width / 4,
                                                 - window.global.height / 4,
                                                   window.global.height / 4,
-                                                  -10, 3000)
-    @camera.position.z = 1000
+                                                  1, 1000)
+    @camera.position.z = 0
     @scene.add(@camera)
-
     @lander = new Lander(@)
     new THREE.JSONLoader().load "js/level#{@levelNumber}.js", (model)=>
       # Take Terrain from Mesh
@@ -47,7 +46,7 @@ class Game
       @scene.add(@level)
       @level.position.x = 0
       @level.position.y = 0
-      @level.position.z = -4
+      @level.position.z = global.terrainZ
       @level.scale.y = -1
       @level.scale.x = 1
 
@@ -112,11 +111,9 @@ class Game
 
       if isContactBetween('terrain', 'landingGear') or isContactBetween('terrain', 'landerSphere')
         @lander.frameImpulse += sumImpulses contact
-        vel = @lander.body.GetLinearVelocity()
-        velocity = Math.sqrt(vel.x*vel.x + vel.y*vel.y)
         maxVel = 0.5
-        if (velocity)>maxVel
-          @lander.damage += Math.max(10, (velocity-maxVel)/10)
+        if (@lander.velD)>maxVel
+          @lander.damage += Math.min(30, (@lander.velD-maxVel)*10)
       
                   
 
@@ -134,14 +131,11 @@ class Game
     @quit = true
 
   mainLoop: (newFrame)=>
-    if newFrame?
-      dt = (newFrame-@lastFrame)/1000
-      if dt>2 then dt = 0.01
-      if (dt==0) or isNaN(dt)
-        dt = 0.0001
-    else
-      dt = 0.0001
-    @lastFrame = newFrame
+    global.stats.update()
+    # limit time step. This slows down the game when the framerate goes below
+    # the threshold, but the physics engine and the game control would suffer
+    # too much already.
+    dt = Math.min(1/15, @clock.getDelta())
     if @pressedKeys[82]
       @quit = true
     if @quit
@@ -167,9 +161,15 @@ class Game
       @lander.thrust = 0
       @lander.steering = 0
     @lander.frameImpulse = 0
-    steps = dt* 60*60*5
+    t = Date.now()
+    end_t = t
+    while (t<end_t)
+      t = Date.now()
+
+    steps = 5
     @world.Step(dt, steps, steps)
     @world.ClearForces()
+    
     for entity in @entities
       entity.update dt
     if @lander.damage>=100
@@ -179,9 +179,6 @@ class Game
         @terminal.display("The Lander is kaputt. Press 'r'")
         @lander.destroyed=true
         
-
-
-
     @camera.position.x = @lander.mesh.position.x
     @camera.position.y = @lander.mesh.position.y
     global.renderer.render(@scene, @camera)
@@ -196,6 +193,8 @@ class Game
 
 
   launch:()->
+    @clock = new THREE.Clock()
+
     @lastFrame = new Date().getTime()
     if global.music?
       global.music.setVolume(global.musicVolume)

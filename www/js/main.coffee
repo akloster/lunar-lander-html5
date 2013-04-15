@@ -2,8 +2,18 @@ window.global =
   width: 1024
   height: 600
   resourceCounter: 0
-  musicVolume: 0.2
+  musicVolume: 0
+  rocketZ: -100
+  landerZ:-200
+  exhaustZ:-30
+  baseZ:-300
+  terrainZ:-400
 
+global.stats = new Stats()
+global.stats.domElement.style.position = 'absolute'
+global.stats.domElement.style.top = '0px'
+global.stats.domElement.style.right = '0px'
+$("body").append(global.stats.domElement)
 # Standard javascript modulo operator returns negative values, so we need our
 # own
 window.signedMod = (a,b)->
@@ -11,6 +21,8 @@ window.signedMod = (a,b)->
 b2Scale = 0.01
 global.renderer = new THREE.CanvasRenderer
   canvas: $("canvas")[0]
+global.renderer.antialias = true
+global.renderer.sortObjects = true
 
 global.renderer.setSize(global.width, global.height)
 ctx = $("canvas#status")[0].getContext('2d')
@@ -38,19 +50,14 @@ global.landerMaterial = new THREE.MeshBasicMaterial
     transparency: true
     map: atlas
     overdraw: true
-    wireframe: true
+    #wireframe: true
 
 global.exhaustMaterial = global.landerMaterial.clone()
 global.exhaustMaterial.opacity = 0.2
-global.exhaustMaterial.blending = THREE.AdditiveBlending
-global.debugMaterial = new THREE.MeshBasicMaterial
-    color: 0xffffff
-    wireframe: true
-    shading: THREE.FlatShading
-    side: THREE.DoubleSide
+#global.exhaustMaterial.blending = THREE.AdditiveBlending
 terrainSurface = THREE.ImageUtils.loadTexture "img/lunarsurface.png"
-terrainSurface.wrapS = THREE.RepeatWrapping 
-terrainSurface.wrapT = THREE.RepeatWrapping 
+terrainSurface.wrapS = THREE.RepeatWrapping
+terrainSurface.wrapT = THREE.RepeatWrapping
 global.levelMaterial = new THREE.MeshBasicMaterial
     color: 0xffffff
     side: THREE.DoubleSide

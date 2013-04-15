@@ -27,8 +27,9 @@
       this.createBody(config);
       this.geometry = new THREE.PlaneGeometry(config.sideLength / 2, config.sideLength / 2, 1, 1);
       this.mesh = new THREE.Mesh(this.geometry, global.landerMaterial);
-      this.game.scene.add(this.mesh);
+      config.scene.add(this.mesh);
       this.steering = 0;
+      this.z = config.z;
     }
 
     RotationalSprite.prototype.createBody = function() {
@@ -46,7 +47,7 @@
       y = this.body.GetPosition().y / b2Scale;
       this.mesh.position.x = x;
       this.mesh.position.y = y;
-      this.mesh.position.z = -1;
+      this.mesh.position.z = this.z;
       a = this.body.GetAngle() + Math.PI / 2;
       if (this.atlasUvs.length > 0) {
         a = signedMod(a, Math.PI * 2);
@@ -76,9 +77,11 @@
         spriteH: 64 / atlas_h,
         x: 0,
         y: 0,
+        z: global.landerZ,
+        scene: game.scene,
         angleOffset: 0,
         sideLength: 64,
-        friction: 0.2
+        friction: 0.7
       });
       this.fuel = 30;
       this.damage = 0;
@@ -86,7 +89,7 @@
       this.exhaustMesh = new THREE.Mesh(this.exhaustGeometry, global.exhaustMaterial);
       this.exhaustStrength = 0;
       this.exhaustCycle = 0;
-      this.game.scene.add(this.exhaustMesh);
+      game.scene.add(this.exhaustMesh);
     }
 
     Lander.prototype.createBody = function(config) {
@@ -145,7 +148,7 @@
       if (global.engine != null) {
         global.engine.setVolume(0.2 * this.exhaustStrength);
       }
-      thrust = 120000000 * dt * this.thrust;
+      thrust = 150000000 * dt * this.thrust;
       f = new b2Vec2(thrust * Math.sin(a), -thrust * Math.cos(a));
       p1 = new b2Vec2(x * b2Scale, y * b2Scale);
       this.body.ApplyForce(f, p1);
@@ -160,11 +163,8 @@
       this.exhaustGeometry.uvsNeedUpdate = true;
       this.exhaustMesh.position.x = x;
       this.exhaustMesh.position.y = y;
-      this.exhaustMesh.position.z = 10;
-      this.exhaustMesh.rotation.z = a + Math.PI / 2;
-      if (this.frameImpulse > 1500000) {
-        return this.damage += 5;
-      }
+      this.exhaustMesh.position.z = global.exhaustZ;
+      return this.exhaustMesh.rotation.z = a + Math.PI / 2;
     };
 
     return Lander;
@@ -185,8 +185,9 @@
       config.friction = 0.1;
       config.mass = 10000000;
       config.angleOffset = 0;
+      config.scene = config.game.scene;
+      config.z = global.rocketZ + Math.random() * 20;
       Rocket.__super__.constructor.call(this, config);
-      this.mesh.position.z = -1;
     }
 
     Rocket.prototype.createBody = function(config) {
@@ -266,7 +267,7 @@
         game: config.game,
         x: config.x,
         y: config.y - 10,
-        z: -2,
+        z: global.baseZ + Math.random() * 20,
         spriteW: 80,
         spriteH: 80,
         screenWidth: 80,
@@ -285,9 +286,9 @@
         this.frame = Math.min(this.frame, 63);
       }
       MissileBase.__super__.update.call(this, dt);
-      if (this.game.lander.velD < 0.01) {
-        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 7) {
-          if (Math.abs(this.y - this.game.lander.mesh.position.y - 5) < 20) {
+      if (this.game.lander.velD < 0.0001) {
+        if (Math.abs(this.x - this.game.lander.mesh.position.x) < 8) {
+          if (Math.abs(this.y - this.game.lander.mesh.position.y - 10) < 20) {
             if (Math.abs(signedMod(this.game.lander.body.GetAngle(), Math.PI * 2)) < Math.PI / 360 * 10) {
               if (!this.exploded) {
                 this.game.basesDestroyed += 1;
@@ -361,8 +362,8 @@
         this.terminal.display("Level " + this.levelNumber + "...");
       }
       this.scene = new THREE.Scene();
-      this.camera = new THREE.OrthographicCamera(-window.global.width / 4, window.global.width / 4, -window.global.height / 4, window.global.height / 4, -10, 3000);
-      this.camera.position.z = 1000;
+      this.camera = new THREE.OrthographicCamera(-window.global.width / 4, window.global.width / 4, -window.global.height / 4, window.global.height / 4, 1, 1000);
+      this.camera.position.z = 0;
       this.scene.add(this.camera);
       this.lander = new Lander(this);
       new THREE.JSONLoader().load("js/level" + this.levelNumber + ".js", function(model) {
@@ -372,7 +373,7 @@
         _this.scene.add(_this.level);
         _this.level.position.x = 0;
         _this.level.position.y = 0;
-        _this.level.position.z = -4;
+        _this.level.position.z = global.terrainZ;
         _this.level.scale.y = -1;
         _this.level.scale.x = 1;
         verts = model.vertices;
@@ -427,7 +428,7 @@
       });
       this.listener = new b2ContactListener();
       this.listener.PostSolve = function(contact, impulse) {
-        var fixA, fixB, isContactBetween, maxVel, sumImpulses, vel, velocity;
+        var fixA, fixB, isContactBetween, maxVel, sumImpulses;
 
         fixA = contact.GetFixtureA();
         fixB = contact.GetFixtureB();
@@ -447,11 +448,9 @@
         };
         if (isContactBetween('terrain', 'landingGear') || isContactBetween('terrain', 'landerSphere')) {
           _this.lander.frameImpulse += sumImpulses(contact);
-          vel = _this.lander.body.GetLinearVelocity();
-          velocity = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
           maxVel = 0.5;
-          if (velocity > maxVel) {
-            return _this.lander.damage += Math.max(10, (velocity - maxVel) / 10);
+          if (_this.lander.velD > maxVel) {
+            return _this.lander.damage += Math.min(30, (_this.lander.velD - maxVel) * 10);
           }
         }
       };
@@ -485,20 +484,10 @@
     };
 
     Game.prototype.mainLoop = function(newFrame) {
-      var dt, entity, game, steps, _i, _len, _ref;
+      var dt, end_t, entity, game, steps, t, _i, _len, _ref;
 
-      if (newFrame != null) {
-        dt = (newFrame - this.lastFrame) / 1000;
-        if (dt > 2) {
-          dt = 0.01;
-        }
-        if ((dt === 0) || isNaN(dt)) {
-          dt = 0.0001;
-        }
-      } else {
-        dt = 0.0001;
-      }
-      this.lastFrame = newFrame;
+      global.stats.update();
+      dt = Math.min(1 / 15, this.clock.getDelta());
       if (this.pressedKeys[82]) {
         this.quit = true;
       }
@@ -526,7 +515,12 @@
         this.lander.steering = 0;
       }
       this.lander.frameImpulse = 0;
-      steps = dt * 60 * 60 * 5;
+      t = Date.now();
+      end_t = t;
+      while (t < end_t) {
+        t = Date.now();
+      }
+      steps = 5;
       this.world.Step(dt, steps, steps);
       this.world.ClearForces();
       _ref = this.entities;
@@ -556,6 +550,7 @@
     };
 
     Game.prototype.launch = function() {
+      this.clock = new THREE.Clock();
       this.lastFrame = new Date().getTime();
       if (global.music != null) {
         global.music.setVolume(global.musicVolume);
@@ -588,8 +583,23 @@
     width: 1024,
     height: 600,
     resourceCounter: 0,
-    musicVolume: 0.2
+    musicVolume: 0,
+    rocketZ: -100,
+    landerZ: -200,
+    exhaustZ: -30,
+    baseZ: -300,
+    terrainZ: -400
   };
+
+  global.stats = new Stats();
+
+  global.stats.domElement.style.position = 'absolute';
+
+  global.stats.domElement.style.top = '0px';
+
+  global.stats.domElement.style.right = '0px';
+
+  $("body").append(global.stats.domElement);
 
   window.signedMod = function(a, b) {
     if (a < 0) {
@@ -604,6 +614,10 @@
   global.renderer = new THREE.CanvasRenderer({
     canvas: $("canvas")[0]
   });
+
+  global.renderer.antialias = true;
+
+  global.renderer.sortObjects = true;
 
   global.renderer.setSize(global.width, global.height);
 
@@ -639,22 +653,12 @@
     shading: THREE.FlatShading,
     transparency: true,
     map: atlas,
-    overdraw: true,
-    wireframe: true
+    overdraw: true
   });
 
   global.exhaustMaterial = global.landerMaterial.clone();
 
   global.exhaustMaterial.opacity = 0.2;
-
-  global.exhaustMaterial.blending = THREE.AdditiveBlending;
-
-  global.debugMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    wireframe: true,
-    shading: THREE.FlatShading,
-    side: THREE.DoubleSide
-  });
 
   terrainSurface = THREE.ImageUtils.loadTexture("img/lunarsurface.png");
 

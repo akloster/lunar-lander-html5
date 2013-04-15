@@ -18,8 +18,9 @@ class RotationalSprite
     @createBody(config)
     @geometry = new THREE.PlaneGeometry(config.sideLength/2, config.sideLength/2, 1, 1)
     @mesh = new THREE.Mesh(@geometry, global.landerMaterial)
-    @game.scene.add(@mesh)
+    config.scene.add(@mesh)
     @steering = 0
+    @z = config.z
   createBody: ->
     undefined
   setPosition: (x,y) ->
@@ -30,7 +31,7 @@ class RotationalSprite
     y = @body.GetPosition().y / b2Scale
     @mesh.position.x = x
     @mesh.position.y = y
-    @mesh.position.z = -1
+    @mesh.position.z = @z
     a = @body.GetAngle()+Math.PI/2
     if @atlasUvs.length>0
       a = signedMod(a,Math.PI*2)
@@ -58,16 +59,19 @@ class Lander extends RotationalSprite
       spriteH: 64 / atlas_h
       x: 0
       y: 0
+      z: global.landerZ
+      scene: game.scene
       angleOffset: 0
       sideLength: 64
-      friction: 0.2
+      friction: 0.7
     @fuel = 30
     @damage = 0
     @exhaustGeometry = new THREE.PlaneGeometry(32, 32, 1, 1)
     @exhaustMesh = new THREE.Mesh(@exhaustGeometry, global.exhaustMaterial)
     @exhaustStrength = 0
     @exhaustCycle = 0
-    @game.scene.add(@exhaustMesh)
+
+    game.scene.add(@exhaustMesh)
   createBody: (config)->
     bodyDef = new b2BodyDef
     @bodyDef = bodyDef
@@ -118,7 +122,7 @@ class Lander extends RotationalSprite
     global.exhaustMaterial.opacity = @exhaustStrength
     if global.engine?
       global.engine.setVolume(0.2*@exhaustStrength)
-    thrust = 120000000*dt*@thrust
+    thrust = 150000000*dt*@thrust
     f = new b2Vec2(thrust*Math.sin(a), -thrust*Math.cos(a))
     p1 = new b2Vec2(x*b2Scale, y*b2Scale)
     @body.ApplyForce(f, p1)
@@ -139,11 +143,9 @@ class Lander extends RotationalSprite
     @exhaustGeometry.uvsNeedUpdate = true
     @exhaustMesh.position.x = x
     @exhaustMesh.position.y = y
-    @exhaustMesh.position.z = 10
+    @exhaustMesh.position.z = global.exhaustZ
     @exhaustMesh.rotation.z = a+Math.PI/2
 
-    if @frameImpulse>1500000
-      @damage+=5
 
 class Rocket extends RotationalSprite
   constructor: (config) ->
@@ -157,8 +159,9 @@ class Rocket extends RotationalSprite
     config.friction = 0.1
     config.mass = 10000000
     config.angleOffset = 0
+    config.scene = config.game.scene
+    config.z = global.rocketZ+ Math.random()*20
     super config
-    @mesh.position.z = -1
 
   createBody: (config)->
     bodyDef = new b2BodyDef
@@ -216,7 +219,6 @@ class AnimatedSprite
     ]]]
     @geometry.uvsNeedUpdate = true
 
-
 class MissileBase extends AnimatedSprite
   constructor: (config)->
     @exploded = false
@@ -224,7 +226,7 @@ class MissileBase extends AnimatedSprite
       game: config.game
       x: config.x
       y: config.y-10
-      z: -2
+      z: global.baseZ+Math.random()*20
       spriteW: 80
       spriteH: 80
       screenWidth: 80
@@ -236,9 +238,9 @@ class MissileBase extends AnimatedSprite
       @frame+=dt*15
       @frame = Math.min(@frame, 63)
     super dt
-    if @game.lander.velD< 0.01
-      if Math.abs(@x-@game.lander.mesh.position.x)<7
-        if Math.abs(@y-@game.lander.mesh.position.y-5)<20
+    if @game.lander.velD< 0.0001
+      if Math.abs(@x-@game.lander.mesh.position.x)<8
+        if Math.abs(@y-@game.lander.mesh.position.y-10)<20
           if Math.abs(signedMod(@game.lander.body.GetAngle(), Math.PI*2))<Math.PI/360*10
             unless @exploded
               @game.basesDestroyed += 1
